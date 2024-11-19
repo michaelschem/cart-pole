@@ -18,22 +18,30 @@
 const int steps_per_rev = 400;  // Effective steps per revolution
 const float gear_diameter = 17.0;  // Diameter of the gear in mm
 const float circumference = 3.14159 * gear_diameter;  // Circumference of the gear in mm
+const int max_rpm = 20;
 
 Encoder* myEnc = nullptr;
 
 void set_direction(int dir) {
   if (dir == LEFT) {
     digitalWrite(DIR_PIN, LOW);
-    Serial.println("Set direction: LEFT");
+    // Serial.println("Set direction: LEFT");
   } else {
     digitalWrite(DIR_PIN, HIGH);
-    Serial.println("Set direction: RIGHT");
+    // Serial.println("Set direction: RIGHT");
   }
 }
 
 int currentDirection = LEFT;
 int speed_us = 5000;
 
+unsigned long lastPrintTime = 0;
+
+const int num_readings = 10;
+float angle_readings[num_readings];
+int read_index = 0;
+float total = 0;
+float average_angle = 0;
 
 void setup() {
     pinMode(PUL_PIN, OUTPUT);
@@ -64,12 +72,17 @@ void setup() {
   } else {
     Serial.println("Encoder initialization failed");
   }
+
+  // Initialize all the readings to 0
+  for (int i = 0; i < num_readings; i++) {
+    angle_readings[i] = 0;
+  }
 }
 
 void loop() {
   // // Read the position from the encoder
   long position = myEnc->read();
-  Serial.println(position);
+  // Serial.println(position);
 
   // Calculate angle (assuming 400 pulses per revolution)
   const int pulses_per_revolution = 400; 
@@ -78,21 +91,45 @@ void loop() {
   // Handle negative angles (optional for full circle display)
   if (angle < 0) angle += 360;
 
-  // Print to serial
-  // Serial.print("Position: ");
-  // Serial.print(position);
-  // Serial.print(" | Angle: ");
-  // Serial.println(angle);
-  // delay(100);
+  // Update the total by subtracting the oldest reading and adding the new one
+  total = total - angle_readings[read_index];
+  angle_readings[read_index] = angle;
+  total = total + angle_readings[read_index];
 
-  float distanceFrom90 = abs(angle - 90.0);
-  if (distanceFrom90 > 30.0) {
+  // Advance to the next position in the array
+  read_index = (read_index + 1) % num_readings;
+
+  // Calculate the average angle
+  average_angle = total / num_readings;
+
+  // Determine direction
+  const char* directionStr = (currentDirection == LEFT) ? "LEFT" : "RIGHT";
+
+  // Calculate speed in RPM
+  float speed_rpm = (speed_us > 0) ? (60.0 * 1000000.0 / (speed_us * steps_per_rev)) : 0;
+
+  // Print direction, speed (RPM), and angle every second
+  // unsigned long currentTime = millis();
+  // if (currentTime - lastPrintTime >= 1000) {
+  //   Serial.print("Direction: ");
+  //   Serial.print(directionStr);
+  //   Serial.print(" | Speed (RPM): ");
+  //   Serial.print(speed_rpm);
+  //   Serial.print(" | Angle: ");
+  //   Serial.println(average_angle);
+  //   lastPrintTime = currentTime;
+  // }
+
+  float distanceFrom90 = abs(average_angle - 90.0);
+  if (distanceFrom90 > 40.0) {
     speed_us = 0;  // Stop the motor
   } else {
-    speed_us = 5000 * (30.0 - distanceFrom90) / 30.0;  // Proportional speed
+    // Calculate speed_us for the maximum speed defined by max_rpm
+    float max_speed_us = 60.0 * 1000000.0 / (max_rpm * steps_per_rev);
+    speed_us = max_speed_us * (40.0 - distanceFrom90) / 40.0;
   }
 
-  if (angle > 90.0) {
+  if (average_angle < 90.0) {
     currentDirection = LEFT;
   } else {
     currentDirection = RIGHT;
