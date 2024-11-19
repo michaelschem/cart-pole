@@ -1,111 +1,55 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
+#include <Encoder.h>
+#include <esp32-hal-gpio.h> // Include the ESP32 GPIO library
 
-#define PUL_PIN 15  // Pulse pin (D15 on Mega or A1 on Uno)
-#define DIR_PIN 2   // Direction pin (D2)
-#define ENA_PIN 4   // Enable pin (D4)
+// Define the pins connected to the encoder
+#define ENCODER_PIN_A 5
+#define ENCODER_PIN_B 19
 
-#define LEFT 1
-#define RIGHT 2
-
-char* ssid = "Woodsy";
-char* password = "unit103!";
-
-// Constants
-const int steps_per_rev = 400;  // Effective steps per revolution
-const float gear_diameter = 17.0;  // Diameter of the gear in mm
-const float circumference = 3.14159 * gear_diameter;  // Circumference of the gear in mm
-
-WiFiUDP udp;
-unsigned int localUdpPort = 8888;  // Local port to listen on
-char incomingPacket[255];  // Buffer for incoming packets
+Encoder* myEnc = nullptr;
 
 void setup() {
-  pinMode(PUL_PIN, OUTPUT);
-  pinMode(DIR_PIN, OUTPUT);
-  pinMode(ENA_PIN, OUTPUT);
-
-  digitalWrite(ENA_PIN, LOW); // Enable driver
-
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("Connecting to WiFi");
-  WiFi.disconnect(true);
+  Serial.println("Rotary Encoder Test");
 
-  IPAddress local_IP(192, 168, 1, 21);
-  IPAddress gateway(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-  WiFi.config(local_IP, gateway, subnet);
+  myEnc = new Encoder(ENCODER_PIN_A, ENCODER_PIN_B);
 
-  // Connect to WiFi
-  WiFi.begin(ssid, password);
-  unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 30000) {
-    delay(500);
-    Serial.print(".");
+  // Debug prints to check pin definitions
+  Serial.print("Encoder Pin A: ");
+  Serial.println(ENCODER_PIN_A);
+  Serial.print("Encoder Pin B: ");
+  Serial.println(ENCODER_PIN_B);
+
+  // Install the GPIO ISR service if not already installed
+  if (gpio_install_isr_service(ESP_INTR_FLAG_IRAM) != ESP_OK) {
+    Serial.println("Failed to install GPIO ISR service");
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWiFi connected.");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Subnet Mask: ");
-    Serial.println(WiFi.subnetMask());
-    Serial.print("Gateway IP: ");
-    Serial.println(WiFi.gatewayIP());
+  // Check if the encoder object is initialized correctly
+  if (myEnc->read() == 0) {
+    Serial.println("Encoder initialized successfully");
   } else {
-    Serial.println("\nFailed to connect to WiFi. Restarting...");
-    ESP.restart();
-  }
-
-  udp.begin(localUdpPort);
-  Serial.printf("Now listening for UDP packets on port %d\n", localUdpPort);
-}
-
-void set_direction(int dir) {
-  if (dir == LEFT) {
-    digitalWrite(DIR_PIN, LOW);
-    Serial.println("Set direction: LEFT");
-  } else {
-    digitalWrite(DIR_PIN, HIGH);
-    Serial.println("Set direction: RIGHT");
+    Serial.println("Encoder initialization failed");
   }
 }
-
-int currentDirection = LEFT;
-int speed_us = 5000;
 
 void loop() {
-  int packetSize = udp.parsePacket();
-  if (packetSize) {
-    int len = udp.read(incomingPacket, 255);
-    if (len > 0) {
-      incomingPacket[len] = 0;  // Null-terminate the string
-    }
-    float receivedNumber = atof(incomingPacket);
-    Serial.printf("Received UDP packet: %f\n", receivedNumber);
+  // // Read the position from the encoder
+  long position = myEnc->read();
+  Serial.println(position);
 
-    float distanceFrom90 = abs(receivedNumber - 90.0);
-    if (distanceFrom90 > 30.0) {
-      speed_us = 0;  // Stop the motor
-    } else {
-      speed_us = 5000 * (30.0 - distanceFrom90) / 30.0;  // Proportional speed
-    }
+  // Calculate angle (assuming 400 pulses per revolution)
+  const int pulses_per_revolution = 400; 
+  float angle = (position % pulses_per_revolution) * (360.0 / pulses_per_revolution);
 
-    if (receivedNumber > 90.0) {
-      currentDirection = LEFT;
-    } else {
-      currentDirection = RIGHT;
-    }
-  }
+  // Handle negative angles (optional for full circle display)
+  if (angle < 0) angle += 360;
 
-  if (speed_us > 0) {
-    set_direction(currentDirection);
+  // Print to serial
+  Serial.print("Position: ");
+  Serial.print(position);
+  Serial.print(" | Angle: ");
+  Serial.println(angle);
 
-    digitalWrite(PUL_PIN, HIGH);
-    delayMicroseconds(speed_us / 2);
-    digitalWrite(PUL_PIN, LOW);
-    delayMicroseconds(speed_us / 2);
-  }
+  delay(1000);
 }
