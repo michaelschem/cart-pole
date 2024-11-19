@@ -86,6 +86,13 @@ void loop() {
     float receivedNumber = atof(incomingPacket);
     Serial.printf("Received UDP packet: %f\n", receivedNumber);
 
+    float distanceFrom90 = abs(receivedNumber - 90.0);
+    if (distanceFrom90 > 30.0) {
+      speed_us = 0;  // Stop the motor
+    } else {
+      speed_us = 5000 * (30.0 - distanceFrom90) / 30.0;  // Proportional speed
+    }
+
     if (receivedNumber > 90.0) {
       currentDirection = LEFT;
     } else {
@@ -93,10 +100,12 @@ void loop() {
     }
   }
 
-  set_direction(currentDirection);
+  if (speed_us > 0) {
+    set_direction(currentDirection);
 
-  digitalWrite(PUL_PIN, HIGH);
-  delayMicroseconds(speed_us / 2);
-  digitalWrite(PUL_PIN, LOW);
-  delayMicroseconds(speed_us / 2);
+    digitalWrite(PUL_PIN, HIGH);
+    delayMicroseconds(speed_us / 2);
+    digitalWrite(PUL_PIN, LOW);
+    delayMicroseconds(speed_us / 2);
+  }
 }
