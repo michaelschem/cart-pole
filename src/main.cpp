@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Encoder.h>
 #include <esp32-hal-gpio.h>
+#include <math.h>
 
 // Define the pins connected to the encoder
 #define ENCODER_PIN_A 5
@@ -18,6 +19,7 @@
 const int steps_per_rev = 400;
 const float max_rpm = 800;
 const int max_angle = 30;
+const float rod_length = 200.0;  // Length of the rod in mm
 
 unsigned long lastPrintTime = 0;
 
@@ -82,10 +84,9 @@ public:
         encoder->write(0);
     }
 
-    float getAverageAngle() {
+    float getAngle() {
         long position = encoder->read();
         float angle = (position % stepsPerRev) * (360.0 / stepsPerRev);
-
         return angle;
     }
 
@@ -125,13 +126,14 @@ void setup() {
 }
 
 void loop() {
-    float averageAngle = encoder.getAverageAngle();
+    float angle = encoder.getAngle();
+    float head_position = rod_length * sin(radians(angle));  // Calculate the head position of the rod
     float speed_rpm;
 
-    if (abs(averageAngle) > max_angle) {
+    if (abs(head_position) > max_angle) {
         speed_rpm = 0;
     } else {
-        speed_rpm = max_rpm * (abs(averageAngle) / max_angle);
+        speed_rpm = max_rpm * (abs(head_position) / max_angle);
     }
 
     // Convert RPM to microseconds per step
@@ -139,7 +141,7 @@ void loop() {
 
     motor.setSpeed(speed_us);
 
-    if (averageAngle < 0) {
+    if (head_position < 0) {
         motor.setDirection(LEFT);
     } else {
         motor.setDirection(RIGHT);
@@ -157,7 +159,9 @@ void loop() {
         Serial.print(" | Speed (us): ");
         Serial.print(speed_us);
         Serial.print(" | Angle: ");
-        Serial.println(averageAngle);
+        Serial.print(angle);
+        Serial.print(" | Head Position: ");
+        Serial.println(head_position);
         lastPrintTime = currentTime;
     }
 }
