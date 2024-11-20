@@ -16,8 +16,8 @@
 
 // Constants
 const int steps_per_rev = 400;
-const float max_rpm = 400;
-const int max_angle = 50;
+const float max_rpm = 800;
+const int max_angle = 30;
 
 unsigned long lastPrintTime = 0;
 
@@ -70,11 +70,7 @@ private:
 class EncoderReader {
 public:
     EncoderReader(int stepsPerRev)
-        : stepsPerRev(stepsPerRev), total(0), readIndex(0), averageAngle(0.0), encoder(nullptr) {
-        for (int i = 0; i < numReadings; i++) {
-            angleReadings[i] = 0.0;
-        }
-        total = 0.0 * numReadings;
+        : stepsPerRev(stepsPerRev), encoder(nullptr) {
     }
 
     ~EncoderReader() {
@@ -83,7 +79,7 @@ public:
 
     void setup(int pinA, int pinB) {
         encoder = new Encoder(pinA, pinB);
-        encoder->write(0);  // Initialize encoder position to 0
+        encoder->write(0);
     }
 
     float getAverageAngle() {
@@ -91,25 +87,11 @@ public:
         float angle = (position % stepsPerRev) * (360.0 / stepsPerRev);
 
         return angle;
-
-        // total = total - angleReadings[readIndex];
-        // angleReadings[readIndex] = angle;
-        // total = total + angleReadings[readIndex];
-
-        // readIndex = (readIndex + 1) % numReadings;
-        // averageAngle = total / numReadings;
-
-        // return averageAngle;
     }
 
 private:
     Encoder* encoder;
     const int stepsPerRev;
-    static const int numReadings = 10;
-    float angleReadings[numReadings];
-    int readIndex;
-    float total;
-    float averageAngle;
 };
 
 MotorController motor(PUL_PIN, DIR_PIN, ENA_PIN);
